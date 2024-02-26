@@ -69,6 +69,7 @@ public class PaintManager : Singleton<PaintManager>{
         paintMaterial.SetColor(colorID, color ?? Color.red);
         extendMaterial.SetFloat(uvOffsetID, paintable.extendsIslandOffset);
         extendMaterial.SetTexture(uvIslandsID, uvIslands);
+        extendMaterial.SetColor(colorID, color ?? Color.red);
 
         command.SetRenderTarget(mask);
         command.DrawRenderer(rend, paintMaterial, 0);
