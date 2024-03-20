@@ -34,15 +34,18 @@ MonoBehaviour:
     IsEnabled: 1
     Event: 300
     FilterSettings:
-      RenderQueueType: 0
+      RenderQueueType: 1
       LayerMask:
         serializedVersion: 2
         m_Bits: 16
       PassNames: []
-    KawaseBlur: {fileID: 2100000, guid: 9b722ddd34129b64bb9e87d9b442758b, type: 2}
-    BlitMaterial: {fileID: 2100000, guid: 196e9438cbd14d34c8c13ac1d50f8163, type: 2}
-    BlurPasses: 8
-    BlurDistance: 3
+    WriteDepthShader: {fileID: -6465566751694194690, guid: 53d4e8647911ddf4aa66fc75a12817bf,
+      type: 3}
+    BlurShader: {fileID: 4800000, guid: 05a67853dc0736f4eb1c2b08f330acb4, type: 3}
+    BlitShader: {fileID: -6465566751694194690, guid: 3a212453c458df644ac2e240d86fdfde,
+      type: 3}
+    BlurPasses: 4
+    BlurDistance: 2
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -90,7 +93,7 @@ MonoBehaviour:
     m_Bits: 4294967295
   m_TransparentLayerMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 47
   m_DefaultStencilState:
     overrideStencilState: 0
     stencilReference: 0
@@ -126,8 +129,9 @@ MonoBehaviour:
         serializedVersion: 2
         m_Bits: 16
       PassNames: []
-    KawaseBlur: {fileID: 2100000, guid: 9b722ddd34129b64bb9e87d9b442758b, type: 2}
-    BlitMaterial: {fileID: 0}
+    WriteDepthShader: {fileID: 0}
+    BlurShader: {fileID: 0}
+    BlitShader: {fileID: 0}
     BlurPasses: 4
     BlurDistance: 0
 --- !u!114 &1691944851224168880

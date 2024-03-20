@@ -15,8 +15,9 @@ public class RenderMetaballsScreenSpace : ScriptableRendererFeature
 
         public RenderObjects.FilterSettings FilterSettings = new RenderObjects.FilterSettings();
 
-        public Material KawaseBlur;
-        public Material BlitMaterial;
+        public Shader WriteDepthShader;
+        public Shader BlurShader;
+        public Shader BlitShader;
 
         [Range(1, 15)]
         public int BlurPasses = 1;
@@ -34,21 +35,41 @@ public class RenderMetaballsScreenSpace : ScriptableRendererFeature
     const int MESH_DRAW_PASS = 0;
     const int KAWASE_BLUR_PASS = 1;
 
+    const string CameraColorTargetId = "_CameraColorTexture";
+    const string CameraDepthTargetId = "_CameraDepthTexture";
+
+    int _cameraColorTargetId;
+    int _cameraDepthTargetId;
+
+    RTHandle cameraDepthTargetRT;
+    RTHandle cameraColorTargetRT;
+
     RenderMetaballsDepthPass _renderMetaballsDepthPass;
     RenderMetaballsScreenSpacePass _renderMetaballsScreenSpacePass;
-
-    RTHandle drawMeshRTHandle;
+    
+    private Material _writeDepthMaterial;    
+    private Material _blitCopyDepthMaterial;    
+    private Material _blurMaterial;
+    private Material _blitMaterial;
 
     #region RENDER METABALLS DEPTH PASS
     class RenderMetaballsDepthPass : ScriptableRenderPass
     {
-        RTHandle _drawRenderersRTHandle;
+        const string MetaballDepthRTId = "_MetaballDepthRT";
+
+        int _metaballDepthRTId;
+
+        RTHandle _metaballDepthRT;
+
+        public Material WriteDepthMaterial;
 
         RenderMetaballsSettings _settings;
 
+
         readonly ProfilingSampler _profilingSampler;
 
-        readonly List<ShaderTagId> _shaderTagIds = new List<ShaderTagId>();        
+        readonly List<ShaderTagId> _shaderTagIds = new List<ShaderTagId>();
+        RenderQueueType _renderQueueType;
         FilteringSettings _filteringSettings;
         RenderStateBlock _renderStateBlock;
 
@@ -59,8 +80,10 @@ public class RenderMetaballsScreenSpace : ScriptableRendererFeature
             _profilingSampler = new ProfilingSampler(_profilerTagRenderMetaballsDepthPass);
 
             this.renderPassEvent = _settings.Event;            
-
-            _filteringSettings = new FilteringSettings(null, _settings.FilterSettings.LayerMask);
+            this._renderQueueType = _settings.FilterSettings.RenderQueueType;
+            RenderQueueRange renderQueueRange = (_renderQueueType == RenderQueueType.Transparent) ?
+                RenderQueueRange.transparent : RenderQueueRange.opaque;
+            _filteringSettings = new FilteringSettings(renderQueueRange, _settings.FilterSettings.LayerMask);
 
             _shaderTagIds.Add(new ShaderTagId("SRPDefaultUnlit"));
             _shaderTagIds.Add(new ShaderTagId("UniversalForward"));
@@ -70,33 +93,27 @@ public class RenderMetaballsScreenSpace : ScriptableRendererFeature
             _renderStateBlock = new RenderStateBlock(RenderStateMask.Nothing);            
         }
 
-        public void SetupDrawRenderersRTHandle(RTHandle drawRenderersRTHandle)
+        public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
         {
-            this._drawRenderersRTHandle = drawRenderersRTHandle;
-        }
+            _metaballDepthRTId = Shader.PropertyToID(MetaballDepthRTId);            
 
-        public void ReleaseHandles()
-        {
-            _drawRenderersRTHandle?.Release();
-        }
+            _metaballDepthRT = RTHandles.Alloc(_metaballDepthRTId, name: MetaballDepthRTId);            
 
-        public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
-        {
-            ConfigureTarget(_drawRenderersRTHandle, renderingData.cameraData.renderer.cameraDepthTargetHandle);
+            ConfigureTarget(_metaballDepthRT);
             ConfigureClear(ClearFlag.Color, Color.clear);
         }
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
-            SortingCriteria sortingCriteria = SortingCriteria.CommonOpaque;
-            DrawingSettings drawingSettings = CreateDrawingSettings(_shaderTagIds, ref renderingData, sortingCriteria);            
-            drawingSettings.overrideMaterial = _settings.KawaseBlur;
-            drawingSettings.overrideMaterialPassIndex = MESH_DRAW_PASS;
+            SortingCriteria sortingCriteria =(_renderQueueType == RenderQueueType.Transparent) ?
+                SortingCriteria.CommonTransparent : renderingData.cameraData.defaultOpaqueSortFlags;
+            DrawingSettings drawingSettings = CreateDrawingSettings(_shaderTagIds, ref renderingData, sortingCriteria);
 
             CommandBuffer cmd = CommandBufferPool.Get(_profilingSampler.name);
 
             using (new ProfilingScope(cmd, _profilingSampler))
             {
+                drawingSettings.overrideMaterial = WriteDepthMaterial;
                 context.DrawRenderers(renderingData.cullResults, ref drawingSettings, ref _filteringSettings, ref _renderStateBlock);
             }
 
@@ -110,20 +127,33 @@ public class RenderMetaballsScreenSpace : ScriptableRendererFeature
     #region RENDER METABALLS SCREEN SPACE PASS
     class RenderMetaballsScreenSpacePass : ScriptableRenderPass
     {
+        const string MetaballRTId = "_MetaballRT";
+        const string MetaballRT2Id = "_MetaballRT2";
+        const string MetaballDepthRTId = "_MetaballDepthRT";
+
+        int _metaballRTId;
+        int _metaballRT2Id;
+        int _metaballDepthRTId;        
+
+        RTHandle _metaballRT;
+        RTHandle _metaballRT2;
+        RTHandle _metaballDepthRT;
+        RTHandle _cameraDepthTargetRT;
+        RTHandle _cameraColorTargetRT;
+
         RenderMetaballsSettings _settings;
 
         readonly ProfilingSampler _profilingSampler;
 
         readonly List<ShaderTagId> _shaderTagIds = new List<ShaderTagId>();
-        
+
+        RenderQueueType _renderQueueType;
         FilteringSettings _filteringSettings;
-        RenderStateBlock _renderStateBlock;
+        RenderStateBlock _renderStateBlock;        
 
-        RTHandle _metaballRT;
-        RTHandle _metaballRT2;
-        RTHandle _cameraTargetRT;
-
-        private RTHandle source { get; set; }
+        public Material BlitCopyDepthMaterial;
+        public Material BlurMaterial;
+        public Material BlitMaterial;
 
         public RenderMetaballsScreenSpacePass(RenderMetaballsSettings settings)
         {
@@ -131,8 +161,11 @@ public class RenderMetaballsScreenSpace : ScriptableRendererFeature
 
             _profilingSampler = new ProfilingSampler(_profilerTagRenderMetaballsScreenSpacePass);
             this.renderPassEvent = _settings.Event;
+            this._renderQueueType = _settings.FilterSettings.RenderQueueType;
+            RenderQueueRange renderQueueRange = (_renderQueueType == RenderQueueType.Transparent) ?
+                RenderQueueRange.transparent : RenderQueueRange.opaque;
 
-            _filteringSettings = new FilteringSettings(null, _settings.FilterSettings.LayerMask);
+            _filteringSettings = new FilteringSettings(renderQueueRange, _settings.FilterSettings.LayerMask);
 
             _shaderTagIds.Add(new ShaderTagId("SRPDefaultUnlit"));
             _shaderTagIds.Add(new ShaderTagId("UniversalForward"));
@@ -142,108 +175,119 @@ public class RenderMetaballsScreenSpace : ScriptableRendererFeature
             _renderStateBlock = new RenderStateBlock(RenderStateMask.Nothing);
         }
 
-        public void SetDrawRenderersRTHandle(RTHandle source)
+        public void SetDrawRenderersRTHandle(RTHandle cameraDepthTargetRT, RTHandle cameraColorTargetRT)
         {
-            this.source = source;
-        }
-
-        public void ReleaseHandles()
-        {
-            _metaballRT?.Release();
-            _metaballRT2?.Release();
+            this._cameraDepthTargetRT = cameraDepthTargetRT;
+            this._cameraColorTargetRT = cameraColorTargetRT;
         }
 
         public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
         {
-            var width = cameraTextureDescriptor.width / _settings.BlurDistance;
-            var height = cameraTextureDescriptor.height / _settings.BlurDistance;
+            var width = cameraTextureDescriptor.width / _settings.BlurPasses;
+            var height = cameraTextureDescriptor.height / _settings.BlurPasses;
 
             RenderTextureDescriptor renderTextureDescriptor = new RenderTextureDescriptor(width, height, RenderTextureFormat.ARGB32);
-            RenderingUtils.ReAllocateIfNeeded(ref _metaballRT, renderTextureDescriptor);
-            RenderingUtils.ReAllocateIfNeeded(ref _metaballRT2, renderTextureDescriptor);
+            RenderingUtils.ReAllocateIfNeeded(ref _metaballRT, renderTextureDescriptor, FilterMode.Bilinear, name: MetaballRTId);
+            RenderingUtils.ReAllocateIfNeeded(ref _metaballRT2, renderTextureDescriptor, FilterMode.Bilinear, name: MetaballRT2Id);
+            RenderingUtils.ReAllocateIfNeeded(ref _cameraDepthTargetRT, renderTextureDescriptor, FilterMode.Bilinear, name: "_CameraDepthTexture");
+            RenderingUtils.ReAllocateIfNeeded(ref _cameraColorTargetRT, renderTextureDescriptor, FilterMode.Bilinear, name: "_CameraColorTexture");
 
             ConfigureTarget(_metaballRT);            
         }
 
-        public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
-        {            
-            _cameraTargetRT = renderingData.cameraData.renderer.cameraColorTargetHandle;
-        }
-
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
-            SortingCriteria sortingCriteria = SortingCriteria.CommonOpaque;
+            SortingCriteria sortingCriteria = (_renderQueueType == RenderQueueType.Transparent) ?
+                SortingCriteria.CommonTransparent : renderingData.cameraData.defaultOpaqueSortFlags;
 
             DrawingSettings drawingSettings = CreateDrawingSettings(_shaderTagIds, ref renderingData, sortingCriteria);
 
             CommandBuffer cmd = CommandBufferPool.Get(_profilingSampler.name);
+
             using (new ProfilingScope(cmd, _profilingSampler))
             {
+                // Clear small RT
                 cmd.ClearRenderTarget(true, true, Color.clear);
                 context.ExecuteCommandBuffer(cmd);
                 cmd.Clear();
 
+                // Blit Camera Depth Texture                
+                cmd.Blit(_cameraDepthTargetRT, _metaballRT, BlitCopyDepthMaterial);
+                context.ExecuteCommandBuffer(cmd);
+                cmd.Clear();
+
+                // Draw to RT
                 context.DrawRenderers(renderingData.cullResults, ref drawingSettings, ref _filteringSettings, ref _renderStateBlock);
                 context.ExecuteCommandBuffer(cmd);
                 cmd.Clear();
 
-                cmd.SetGlobalFloat("_Offset", 1.5f);
-                cmd.Blit(_metaballRT, _metaballRT2, _settings.KawaseBlur, KAWASE_BLUR_PASS);
+                // Blur
+                cmd.SetGlobalTexture("_BlurDepthTex", _metaballDepthRT);
+                cmd.SetGlobalFloat("_BlurDistance", _settings.BlurDistance);
+                float offset = 1.5f;
+                cmd.SetGlobalFloat("_Offset", offset);
+                cmd.Blit(_metaballRT, _metaballRT2, BlurMaterial);
                 context.ExecuteCommandBuffer(cmd);
                 cmd.Clear();
 
-                var rttmp = _metaballRT;
+                var tmpRT = _metaballRT;
                 _metaballRT = _metaballRT2;
-                _metaballRT2 = rttmp;
+                _metaballRT2 = tmpRT;
 
-                for (var i = 1; i < _settings.BlurPasses - 1; i++)
+                for (int i = 1; i < _settings.BlurPasses; ++i)
                 {
-
-                    cmd.SetGlobalFloat("_Offset", 0.5f + i);
-                    cmd.Blit(_metaballRT, _metaballRT2, _settings.KawaseBlur, KAWASE_BLUR_PASS);
+                    offset += 1.0f;
+                    cmd.SetGlobalFloat("_Offset", offset);
+                    cmd.Blit(_metaballRT, _metaballRT2, BlurMaterial);
                     context.ExecuteCommandBuffer(cmd);
                     cmd.Clear();
 
-                    rttmp = _metaballRT;
+                    tmpRT = _metaballRT;
                     _metaballRT = _metaballRT2;
-                    _metaballRT2 = rttmp;
+                    _metaballRT2 = tmpRT;
                 }
 
-                //cmd.SetGlobalFloat("_Offset", 0.5f + _settings.BlurPasses - 1f);
-                //cmd.Blit(_metaballRT, _cameraTargetRT, _settings.BlitMaterial);
+                //cmd.Blit(_metaballRT, _cameraColorTargetRT, BlitMaterial);
             }
 
-            context.ExecuteCommandBuffer(cmd);            
-            CommandBufferPool.Release(cmd);
-        }
-
-        public override void OnCameraCleanup(CommandBuffer cmd)
-        {            
+            context.ExecuteCommandBuffer(cmd);
+            cmd.Clear();
+            CommandBufferPool.Release(cmd);            
         }
     }
     #endregion
 
     public override void Create()
     {
-        if (!Settings.IsEnabled) return;
+        if (!Settings.IsEnabled || !Settings.WriteDepthShader) return;
 
-        _renderMetaballsDepthPass = new RenderMetaballsDepthPass(Settings);
-        _renderMetaballsScreenSpacePass = new RenderMetaballsScreenSpacePass(Settings);
+        _writeDepthMaterial = CoreUtils.CreateEngineMaterial(Settings.WriteDepthShader);
+        _blitCopyDepthMaterial = CoreUtils.CreateEngineMaterial(Shader.Find("Hidden/BlitToDepth"));
+        _blurMaterial = CoreUtils.CreateEngineMaterial(Settings.BlurShader);
+        _blitMaterial = CoreUtils.CreateEngineMaterial(Settings.BlitShader);
+
+        _renderMetaballsDepthPass = new RenderMetaballsDepthPass(Settings)
+        {
+            WriteDepthMaterial = _writeDepthMaterial,
+        };
+
+        _renderMetaballsScreenSpacePass = new RenderMetaballsScreenSpacePass(Settings)
+        {
+            BlitCopyDepthMaterial = _blitCopyDepthMaterial,
+            BlurMaterial = _blurMaterial,
+            BlitMaterial = _blitMaterial,
+        };
     }
 
     public override void SetupRenderPasses(ScriptableRenderer renderer, in RenderingData renderingData)
     {
-        if (_renderMetaballsDepthPass == null) return;
+        _cameraDepthTargetId = Shader.PropertyToID(CameraDepthTargetId);
+        cameraDepthTargetRT = RTHandles.Alloc(_cameraDepthTargetId);
 
-        RenderTextureDescriptor cameraTargetDesc = renderingData.cameraData.cameraTargetDescriptor;
-        cameraTargetDesc.depthBufferBits = 0;
+        _cameraColorTargetId = Shader.PropertyToID(CameraColorTargetId);
+        cameraColorTargetRT = RTHandles.Alloc(CameraColorTargetId);
 
-        RenderingUtils.ReAllocateIfNeeded(ref drawMeshRTHandle, cameraTargetDesc, FilterMode.Bilinear);
-
-        _renderMetaballsDepthPass.SetupDrawRenderersRTHandle(drawMeshRTHandle);
-
-        RTHandle source = renderingData.cameraData.renderer.cameraColorTargetHandle;
-        _renderMetaballsScreenSpacePass.SetDrawRenderersRTHandle(source);
+        _renderMetaballsScreenSpacePass.SetDrawRenderersRTHandle(cameraDepthTargetRT, cameraColorTargetRT);
     }
 
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
@@ -258,7 +302,9 @@ public class RenderMetaballsScreenSpace : ScriptableRendererFeature
     {
         if (_renderMetaballsDepthPass == null) return;
 
-        _renderMetaballsDepthPass.ReleaseHandles();
-        _renderMetaballsScreenSpacePass.ReleaseHandles();
+        CoreUtils.Destroy(_writeDepthMaterial);
+        CoreUtils.Destroy(_blitCopyDepthMaterial);
+        CoreUtils.Destroy(_blurMaterial);
+        CoreUtils.Destroy(_blitMaterial);
     }
 }

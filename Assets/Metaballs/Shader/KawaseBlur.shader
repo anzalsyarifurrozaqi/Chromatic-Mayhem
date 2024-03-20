@@ -2,164 +2,91 @@ Shader "Hidden/KawaseBlur"
 {
     Properties
     {
-         _MainTex("Base Texture", 2D) = "white" {}
+        _MainTex ("Texture", 2D) = "white" {}
     }
 
     SubShader
     {
-        Tags { "RenderPipeline" = "UniversalPipeline" }        
-
-        HLSLINCLUDE
-
-        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
-
-        #pragma multi_compile _SAMPLES_LOW _SAMPLES_MEDIUM _SAMPLES_HIGH
-
-        #pragma exclude_renderers gles gles3 glcore
-        #pragma target 4.5
-
-        CBUFFER_START(UnityPerMaterial)
-            real4 _MainTex_TexelSize;            
-        CBUFFER_END
-
-        ENDHLSL
+        Tags { "RenderType"="Opaque" }
+        ZWrite Off
 
         Pass
         {
-            Name "Mesh_Draw"
-
-            Cull Off
-            ZTest LEqual
-            ZWrite Off
-
-            HLSLPROGRAM
-
+            CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
 
-            TEXTURE2D(_MainTex);
-            SAMPLER(sampler_MainTex);
+            #include "UnityCG.cginc"
 
-            struct Attributes
+            struct appdata
             {
-                real4 positionOS : POSITION;
+                float4 vertex : POSITION;
+                float2 uv : TEXCOORD0;
             };
 
-            struct Varyings
+            struct v2f
             {
-                real4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                float4 vertex : SV_POSITION;
             };
 
-            Varyings vert(Attributes IN)
+            float _Offset;
+            
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+            float4 _MainTex_TexelSize;
+
+            sampler2D _MetaballDepthRT;
+            float _BlurDistance;
+
+            v2f vert (appdata v)
             {
-                Varyings Out;
-
-                VertexPositionInputs positionInputs = GetVertexPositionInputs(IN.positionOS.xyz);
-                Out.positionCS = positionInputs.positionCS;
-
-                return Out;
+                v2f o;
+                o.vertex = UnityObjectToClipPos(v.vertex);
+                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                return o;
             }
 
-            real frag(Varyings IN) : SV_Target
+            fixed4 applyBlur(const fixed4 color, const half2 uv, const half2 texelResolution, const half offset)
             {
-                return 1.0;
-            }
-
-            ENDHLSL
-        }
-
-        Pass
-        {
-            Name "Kawase Blur"
-
-            ZTest Always
-            ZWrite Off
-
-            HLSLPROGRAM
-
-            #pragma vertex vert
-            #pragma fragment frag
-
-            TEXTURE2D(_MainTex);
-            SAMPLER(sampler_MainTex);
-            real4 _MainTex_ST;
-
-            TEXTURE2D(_MetaballDepthRT);
-            SAMPLER(sampler_MetaballDepthRT);
-            real4 _MetaballDepthRT_ST;
-
-            real _BlurDistance;
-            real _Offset;
-
-            real _offset;
-
-            struct Attributes
-            {
-                real4 positionOS        : POSITION;
-                real2 uv                : TEXCOORD0;
-            };
-
-            struct Varyings
-            {
-                real4 positionCS        : SV_POSITION;
-                real2 uv                : TEXCOORD0;
-            };
-
-            Varyings vert(Attributes IN)
-            {
-                Varyings Out;
-
-                VertexPositionInputs positionInputs = GetVertexPositionInputs(IN.positionOS.xyz);
-                Out.positionCS = positionInputs.positionCS;
-                Out.uv = TRANSFORM_TEX(IN.uv, _MainTex);
-
-                return Out;
-            }
-
-            real4 applyBlur(const real4 color, const real2 uv, const real2 texelResolution, const real offset)
-            {
-                real4 result = color;
+                fixed4 result = color;
                 
-                result += SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, uv + half2( offset,  offset) * texelResolution);
-                result += SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, uv + half2(-offset,  offset) * texelResolution);
-                result += SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, uv + half2(-offset, -offset) * texelResolution);
-                result += SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, uv + half2( offset, -offset) * texelResolution);
-                result /= 5.0;
+                result += tex2D(_MainTex, uv + half2( offset,  offset) * texelResolution);
+                result += tex2D(_MainTex, uv + half2(-offset,  offset) * texelResolution);
+                result += tex2D(_MainTex, uv + half2(-offset, -offset) * texelResolution);
+                result += tex2D(_MainTex, uv + half2( offset, -offset) * texelResolution);
+                result /= 5.0h;
 
                 return result;
             }
 
-            real applyAlphaBlur(const real4 color, const real2 uv, const real2 texelResolution, const real offset)
+            fixed applyAlphaBlur(const fixed4 color, const half2 uv, const half2 texelResolution, const half offset)
             {
-                 real result = color.a;
+                 fixed result = color.a;
                  
-                 result += SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, uv + real2( offset,  offset) * texelResolution).a;
-                 result += SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, uv + real2( offset, -offset) * texelResolution).a;
-                 result += SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, uv + real2(-offset,  offset) * texelResolution).a;
-                 result += SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, uv + real2(-offset, -offset) * texelResolution).a;
-                 result /= 5.0;
+                 result += tex2D(_MainTex, uv + half2( offset,  offset) * texelResolution).a;
+                 result += tex2D(_MainTex, uv + half2( offset, -offset) * texelResolution).a;
+                 result += tex2D(_MainTex, uv + half2(-offset,  offset) * texelResolution).a;
+                 result += tex2D(_MainTex, uv + half2(-offset, -offset) * texelResolution).a;
+                 result /= 5.0h;
  
                  return result;               
             }
 
-            real4 frag(Varyings IN) : SV_Target
+            fixed4 frag (const v2f input) : SV_Target
             {
-                real2 res = _MainTex_TexelSize.xy;
-                real i = _offset;
+                const half2 texelResolution = _MainTex_TexelSize.xy;
+                const half2 uv = input.uv;
     
-                real4 col;                
-                col.rgb = SAMPLE_TEXTURE2D( _MainTex, sampler_MainTex, IN.uv ).rgb;
-                col.rgb += SAMPLE_TEXTURE2D( _MainTex, sampler_MainTex, IN.uv + real2( i, i ) * res ).rgb;
-                col.rgb += SAMPLE_TEXTURE2D( _MainTex, sampler_MainTex, IN.uv + real2( i, -i ) * res ).rgb;
-                col.rgb += SAMPLE_TEXTURE2D( _MainTex, sampler_MainTex, IN.uv + real2( -i, i ) * res ).rgb;
-                col.rgb += SAMPLE_TEXTURE2D( _MainTex, sampler_MainTex, IN.uv + real2( -i, -i ) * res ).rgb;
-                col.rgb /= 5.0f;
-                
-                return col;
+                fixed4 color = tex2D(_MainTex, uv);
+                fixed4 depth = tex2D(_MetaballDepthRT, uv);
+                if (depth.r < _BlurDistance)
+                {
+                    color = applyBlur(color, uv, texelResolution, _Offset);
+                }
+                return color;
             }
-
-            ENDHLSL
+            ENDCG
         }
     }
 }
