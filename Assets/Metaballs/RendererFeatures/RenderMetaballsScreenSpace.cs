@@ -85,22 +85,30 @@ public class RenderMetaballsScreenSpace : ScriptableRendererFeature
                 RenderQueueRange.transparent : RenderQueueRange.opaque;
             _filteringSettings = new FilteringSettings(renderQueueRange, _settings.FilterSettings.LayerMask);
 
-            _shaderTagIds.Add(new ShaderTagId("SRPDefaultUnlit"));
-            _shaderTagIds.Add(new ShaderTagId("UniversalForward"));
-            _shaderTagIds.Add(new ShaderTagId("UniversalForwardOnly"));
-            _shaderTagIds.Add(new ShaderTagId("LightweightForward"));
+            if (settings.FilterSettings.PassNames != null && settings.FilterSettings.PassNames.Length > 0)
+            {
+                foreach (var passName in settings.FilterSettings.PassNames) 
+                    _shaderTagIds.Add(new ShaderTagId(passName));
+            }
+            else
+            {
+                _shaderTagIds.Add(new ShaderTagId("SRPDefaultUnlit"));
+                _shaderTagIds.Add(new ShaderTagId("UniversalForward"));
+                _shaderTagIds.Add(new ShaderTagId("UniversalForwardOnly"));
+                _shaderTagIds.Add(new ShaderTagId("LightweightForward"));
+            }
 
             _renderStateBlock = new RenderStateBlock(RenderStateMask.Nothing);            
         }
 
         public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
         {
-            _metaballDepthRTId = Shader.PropertyToID(MetaballDepthRTId);            
+            _metaballDepthRTId = Shader.PropertyToID(MetaballDepthRTId);
 
-            _metaballDepthRT = RTHandles.Alloc(_metaballDepthRTId, name: MetaballDepthRTId);            
+            _metaballDepthRT = RTHandles.Alloc(_metaballDepthRTId, name: MetaballDepthRTId);
 
             ConfigureTarget(_metaballDepthRT);
-            ConfigureClear(ClearFlag.Color, Color.clear);
+            //ConfigureClear(ClearFlag.Color, Color.clear);
         }
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
@@ -187,12 +195,16 @@ public class RenderMetaballsScreenSpace : ScriptableRendererFeature
             var height = cameraTextureDescriptor.height / _settings.BlurPasses;
 
             RenderTextureDescriptor renderTextureDescriptor = new RenderTextureDescriptor(width, height, RenderTextureFormat.ARGB32);
-            RenderingUtils.ReAllocateIfNeeded(ref _metaballRT, renderTextureDescriptor, FilterMode.Bilinear, name: MetaballRTId);
-            RenderingUtils.ReAllocateIfNeeded(ref _metaballRT2, renderTextureDescriptor, FilterMode.Bilinear, name: MetaballRT2Id);
-            RenderingUtils.ReAllocateIfNeeded(ref _cameraDepthTargetRT, renderTextureDescriptor, FilterMode.Bilinear, name: "_CameraDepthTexture");
-            RenderingUtils.ReAllocateIfNeeded(ref _cameraColorTargetRT, renderTextureDescriptor, FilterMode.Bilinear, name: "_CameraColorTexture");
 
-            ConfigureTarget(_metaballRT);            
+            _metaballRTId = Shader.PropertyToID(MetaballRTId);
+            _metaballRT2Id = Shader.PropertyToID(MetaballRT2Id);
+
+            _metaballRT = RTHandles.Alloc(renderTextureDescriptor, FilterMode.Bilinear, name: MetaballRTId);
+            _metaballRT2 = RTHandles.Alloc(renderTextureDescriptor, FilterMode.Bilinear, name: MetaballRT2Id);
+            _cameraDepthTargetRT = RTHandles.Alloc(renderTextureDescriptor, FilterMode.Bilinear, name: "_CameraDepthTexture");
+            _cameraColorTargetRT = RTHandles.Alloc(renderTextureDescriptor, FilterMode.Bilinear, name: "_CameraColorTexture");
+
+            ConfigureTarget(_metaballRT);
         }
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
@@ -247,7 +259,7 @@ public class RenderMetaballsScreenSpace : ScriptableRendererFeature
                     _metaballRT2 = tmpRT;
                 }
 
-                //cmd.Blit(_metaballRT, _cameraColorTargetRT, BlitMaterial);
+                cmd.Blit(_metaballRT, _cameraColorTargetRT, BlitMaterial);
             }
 
             context.ExecuteCommandBuffer(cmd);

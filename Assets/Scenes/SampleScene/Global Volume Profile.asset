@@ -52,7 +52,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 14b63444b5ad0004e84bbf52fa2fd769, type: 3}
   m_Name: CustomVolumeComponent
   m_EditorClassIdentifier: 
-  active: 1
+  active: 0
   isActive:
     m_OverrideState: 1
     m_Value: 1
