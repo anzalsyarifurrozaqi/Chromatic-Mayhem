@@ -17,6 +17,35 @@ MonoBehaviour:
     horizontalBlur: 0.017
     verticalBlur: 0.007
   shader: {fileID: 4800000, guid: 090769abed9a6ff4caaaf3c183131965, type: 3}
+--- !u!114 &-1799498987886923339
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 791ec76b023d5b64c8fb2dcc48f58a9f, type: 3}
+  m_Name: RenderMetaballsScreenSpace
+  m_EditorClassIdentifier: 
+  m_Active: 1
+  Settings:
+    IsEnabled: 1
+    Event: 400
+    FilterSettings:
+      RenderQueueType: 1
+      LayerMask:
+        serializedVersion: 2
+        m_Bits: 16
+      PassNames: []
+    KawaseShader: {fileID: 4800000, guid: 05a67853dc0736f4eb1c2b08f330acb4, type: 3}
+    BlitShader: {fileID: -6465566751694194690, guid: 3a212453c458df644ac2e240d86fdfde,
+      type: 3}
+    ColorStep: 0.038
+    ColorStep2: 0.869
+    AlphaStep: 0
+    AlphaStep2: 1
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -34,8 +63,8 @@ MonoBehaviour:
       type: 3}
     hdrDebugViewPS: {fileID: 4800000, guid: 573620ae32aec764abd4d728906d2587, type: 3}
   m_RendererFeatures:
-  - {fileID: 8202461556246614398}
-  m_RendererFeatureMap: 7e91e0af53ffd471
+  - {fileID: -1799498987886923339}
+  m_RendererFeatureMap: b531536534e506e7
   m_UseNativeRenderPass: 0
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}
   xrSystemData: {fileID: 11400000, guid: 60e1133243b97e347b653163a8c01b64, type: 2}
@@ -61,10 +90,10 @@ MonoBehaviour:
   m_AssetVersion: 2
   m_OpaqueLayerMask:
     serializedVersion: 2
-    m_Bits: 47
+    m_Bits: 111
   m_TransparentLayerMask:
     serializedVersion: 2
-    m_Bits: 47
+    m_Bits: 111
   m_DefaultStencilState:
     overrideStencilState: 0
     stencilReference: 0
@@ -100,11 +129,12 @@ MonoBehaviour:
         serializedVersion: 2
         m_Bits: 16
       PassNames: []
-    WriteDepthShader: {fileID: 0}
-    BlurShader: {fileID: 0}
+    KawaseShader: {fileID: 0}
     BlitShader: {fileID: 0}
-    BlurPasses: 4
-    BlurDistance: 0
+    ColorStep: 0
+    ColorStep2: 0
+    AlphaStep: 0
+    AlphaStep2: 0
 --- !u!114 &1691944851224168880
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -160,20 +190,3 @@ MonoBehaviour:
     pixilationMaterial: {fileID: 2100000, guid: aabc653298c1c9d408f6da0ac0ebe8d8,
       type: 2}
     LOD: 4
---- !u!114 &8202461556246614398
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4f9d13e5d7ffb1d42ab4d9d7277ca678, type: 3}
-  m_Name: SimpleFeature
-  m_EditorClassIdentifier: 
-  m_Active: 1
-  settings:
-    horizontalBlur: 0.0444
-    verticalBlur: 0.0466
-  shader: {fileID: 4800000, guid: 090769abed9a6ff4caaaf3c183131965, type: 3}

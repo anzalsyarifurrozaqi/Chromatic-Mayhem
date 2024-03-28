@@ -1,17 +1,17 @@
 void GetDepth_float(float4 ObjectPosition, out float Depth)
 {
-    #if defined(SHADERGRAPH_PREVIEW)
+#if defined(SHADERGRAPH_PREVIEW)
     Depth = 0.5;
-    #else
+#else
     Depth = TransformObjectToHClip(ObjectPosition).w * _ProjectionParams.w;
-    #endif
+#endif
 }
 
 void GetDepth_half(float4 ObjectPosition, out half Depth)
 {
-    #if defined(SHADERGRAPH_PREVIEW)
+#if defined(SHADERGRAPH_PREVIEW)
     Depth = 0.5h;
-    #else
+#else
     Depth = TransformObjectToHClip(ObjectPosition).w * _ProjectionParams.w;
-    #endif
+#endif
 }
